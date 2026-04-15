@@ -1,10 +1,10 @@
 import { v4 as uuid } from "uuid";
 import {
-  account,
-  positions,
+  accounts,
+  accountPositions,
+  accountHistory,
   prices,
   symbols,
-  tradeHistory,
 } from "../data/tradelocker.data.js";
 import { calculatePnL } from "../lib/utils.js";
 
@@ -16,6 +16,22 @@ const maybeFail = () => Math.random() < 0.03;
 
 const success = (data) => ({ success: true, data });
 const error = (message) => ({ success: false, error: message });
+
+// --- Helper: Get Account Context ---
+const getContext = (accountId) => {
+  const account = accounts.find((a) => a.id === accountId);
+
+  if (!account) return null;
+
+  if (!accountPositions[accountId]) accountPositions[accountId] = [];
+  if (!accountHistory[accountId]) accountHistory[accountId] = [];
+
+  return {
+    account,
+    positions: accountPositions[accountId],
+    history: accountHistory[accountId],
+  };
+};
 
 // --- AUTH ---
 export const login = async (req, res) => {
@@ -34,6 +50,13 @@ export const getAccount = async (req, res) => {
   await delay();
 
   try {
+    const { accountId } = req.params;
+
+    const ctx = getContext(accountId);
+    if (!ctx) return res.status(404).json(error("Account not found"));
+
+    const { account, positions } = ctx;
+
     const totalPnL = positions.reduce(
       (sum, p) => sum + calculatePnL(p),
       0
@@ -101,6 +124,13 @@ export const getPositions = async (req, res) => {
   await delay();
 
   try {
+    const { accountId } = req.params;
+
+    const ctx = getContext(accountId);
+    if (!ctx) return res.status(404).json(error("Account not found"));
+
+    const { positions } = ctx;
+
     const updated = positions.map((p) => {
       const market = prices[p.symbol];
 
@@ -126,16 +156,18 @@ export const placeOrder = async (req, res) => {
 
   try {
     if (maybeFail()) {
-      return res
-        .status(500)
-        .json(error("Liquidity provider error"));
+      return res.status(500).json(error("Liquidity error"));
     }
 
+    const { accountId } = req.params;
     const { symbol, volume, side, stopLoss, takeProfit } = req.body;
 
-    // Validation
-    const symbolMeta = symbols.find((s) => s.symbol === symbol);
+    const ctx = getContext(accountId);
+    if (!ctx) return res.status(404).json(error("Account not found"));
 
+    const { account, positions } = ctx;
+
+    const symbolMeta = symbols.find((s) => s.symbol === symbol);
     if (!symbolMeta) {
       return res.status(400).json(error("Invalid symbol"));
     }
@@ -150,11 +182,9 @@ export const placeOrder = async (req, res) => {
 
     const market = prices[symbol];
 
-    // --- Execution price (bid/ask)
     const basePrice =
       side === "BUY" ? market.ask : market.bid;
 
-    // --- Slippage
     const slippage = basePrice * (Math.random() * 0.0005);
 
     const executedPrice =
@@ -162,7 +192,6 @@ export const placeOrder = async (req, res) => {
         ? basePrice + slippage
         : basePrice - slippage;
 
-    // --- Margin Calculation
     const marginRequired =
       (volume * symbolMeta.contractSize) /
       symbolMeta.leverage;
@@ -177,7 +206,6 @@ export const placeOrder = async (req, res) => {
       return res.status(400).json(error("Insufficient margin"));
     }
 
-    // --- Create position
     const position = {
       id: uuid(),
       symbol,
@@ -193,7 +221,6 @@ export const placeOrder = async (req, res) => {
 
     positions.push(position);
 
-    // --- Update account
     account.marginUsed += marginRequired;
 
     return res.json(
@@ -205,7 +232,7 @@ export const placeOrder = async (req, res) => {
       })
     );
   } catch (err) {
-    return res.status(500).json(error("Order execution failed"));
+    return res.status(500).json(error("Order failed"));
   }
 };
 
@@ -214,11 +241,13 @@ export const closePosition = async (req, res) => {
   await delay();
 
   try {
+    const { accountId } = req.params;
     const { positionId } = req.body;
 
-    if (!positionId) {
-      return res.status(400).json(error("positionId required"));
-    }
+    const ctx = getContext(accountId);
+    if (!ctx) return res.status(404).json(error("Account not found"));
+
+    const { account, positions, history } = ctx;
 
     const index = positions.findIndex((p) => p.id === positionId);
 
@@ -235,15 +264,11 @@ export const closePosition = async (req, res) => {
 
     const pnl = calculatePnL(position);
 
-    // --- Update balance
     account.balance += pnl;
-
-    // --- Release margin
     account.marginUsed -= position.margin;
 
     positions.splice(index, 1);
 
-    // --- Save history
     const trade = {
       ...position,
       closePrice,
@@ -251,7 +276,7 @@ export const closePosition = async (req, res) => {
       closedAt: Date.now(),
     };
 
-    tradeHistory.push(trade);
+    history.push(trade);
 
     return res.json(
       success({
@@ -262,11 +287,16 @@ export const closePosition = async (req, res) => {
       })
     );
   } catch (err) {
-    return res.status(500).json(error("Failed to close position"));
+    return res.status(500).json(error("Close failed"));
   }
 };
 
 // --- HISTORY ---
 export const getHistory = (req, res) => {
-  return res.json(success(tradeHistory));
+  const { accountId } = req.params;
+
+  const ctx = getContext(accountId);
+  if (!ctx) return res.status(404).json(error("Account not found"));
+
+  return res.json(success(ctx.history));
 };

@@ -1,61 +1,67 @@
-// --- ACCOUNT ---
-export let account = {
-  id: "acc_1",
-  currency: "USD",
+import { v4 as uuid } from "uuid";
 
-  balance: 10000,
-  equity: 10000,
+// --- ACCOUNTS ---
+export let accounts = [
+  {
+    id: "acc_1",
+    userId: "user_1",
+    currency: "USD",
 
-  leverage: 100,          // 1:100
-  marginUsed: 0,
-  freeMargin: 10000,
-  marginLevel: 0,         // % (equity / marginUsed)
+    balance: 10000,
+    equity: 10000,
 
-  createdAt: Date.now(),
+    leverage: 100,
+    marginUsed: 0,
+    freeMargin: 10000,
+    marginLevel: 0,
+
+    createdAt: Date.now(),
+  },
+];
+
+// --- POSITIONS (PER ACCOUNT) ---
+export let accountPositions = {
+  acc_1: [
+    {
+      id: "pos_1",
+      symbol: "EURUSD",
+      side: "BUY",
+      volume: 1.0,
+
+      openPrice: 1.1000,
+      currentPrice: 1.1012,
+
+      stopLoss: 1.0950,
+      takeProfit: 1.1100,
+
+      profit: 12.0,
+      margin: 100,
+
+      status: "OPEN",
+      createdAt: Date.now(),
+    },
+  ],
 };
 
-// --- POSITIONS (OPEN TRADES) ---
-export let positions = [
-  // Example structure (initially empty in runtime)
-  {
-    id: "pos_1",
-    symbol: "EURUSD",
-    side: "BUY",           // BUY / SELL
-    volume: 1.0,           // lots
+// --- TRADE HISTORY (PER ACCOUNT) ---
+export let accountHistory = {
+  acc_1: [
+    {
+      id: "trade_1",
+      symbol: "EURUSD",
+      side: "BUY",
+      volume: 1,
 
-    openPrice: 1.1000,
-    currentPrice: 1.1012,
+      openPrice: 1.1,
+      closePrice: 1.105,
 
-    stopLoss: 1.0950,
-    takeProfit: 1.1100,
+      pnl: 50,
 
-    profit: 12.0,
-
-    margin: 100,           // used margin
-
-    status: "OPEN",
-    createdAt: Date.now(),
-  }
-];
-
-// --- TRADE HISTORY ---
-export let tradeHistory = [
-  {
-    id: "trade_1",
-    symbol: "EURUSD",
-    side: "BUY",
-    volume: 1,
-
-    openPrice: 1.1,
-    closePrice: 1.105,
-
-    pnl: 50,
-
-    openedAt: 123456789,
-    closedAt: 123456999,
-  }
-
-];
+      openedAt: 123456789,
+      closedAt: 123456999,
+    },
+  ],
+};
 
 // --- MARKET PRICES (WITH BID/ASK) ---
 export let prices = {
@@ -78,7 +84,7 @@ export const symbols = [
     base: "EUR",
     quote: "USD",
 
-    contractSize: 100000,  // standard forex
+    contractSize: 100000,
     minLot: 0.01,
     maxLot: 100,
 

@@ -300,3 +300,128 @@ export const getHistory = (req, res) => {
 
   return res.json(success(ctx.history));
 };
+
+// --- GET SINGLE POSITION ---
+export const getPositionById = (req, res) => {
+  const { accountId, positionId } = req.params;
+
+  const ctx = getContext(accountId);
+  if (!ctx) return res.status(404).json(error("Account not found"));
+
+  const pos = ctx.positions.find((p) => p.id === positionId);
+
+  if (!pos) {
+    return res.status(404).json(error("Position not found"));
+  }
+
+  return res.json(success(pos));
+};
+
+// MODIFY POSITION (SL / TP)
+export const modifyPosition = (req, res) => {
+  const { accountId } = req.params;
+  const { positionId, stopLoss, takeProfit } = req.body;
+
+  const ctx = getContext(accountId);
+  if (!ctx) return res.status(404).json(error("Account not found"));
+
+  const pos = ctx.positions.find((p) => p.id === positionId);
+
+  if (!pos) {
+    return res.status(404).json(error("Position not found"));
+  }
+
+  pos.stopLoss = stopLoss ?? pos.stopLoss;
+  pos.takeProfit = takeProfit ?? pos.takeProfit;
+
+  return res.json(success(pos));
+};
+
+// PARTIAL CLOSE
+export const partialClose = (req, res) => {
+  const { accountId } = req.params;
+  const { positionId, volume } = req.body;
+
+  const ctx = getContext(accountId);
+  if (!ctx) return res.status(404).json(error("Account not found"));
+
+  const pos = ctx.positions.find((p) => p.id === positionId);
+
+  if (!pos) {
+    return res.status(404).json(error("Position not found"));
+  }
+
+  if (!volume || volume <= 0 || volume >= pos.volume) {
+    return res.status(400).json(error("Invalid volume"));
+  }
+
+  const pnl = calculatePnL(pos) * (volume / pos.volume);
+
+  pos.volume -= volume;
+  ctx.account.balance += pnl;
+
+  return res.json(
+    success({
+      remainingVolume: pos.volume,
+      closedVolume: volume,
+      pnl,
+    })
+  );
+};
+
+// GET ORDERS
+export const getOrders = (req, res) => {
+  return res.json(
+    success([
+      {
+        id: "ord_1",
+        symbol: "EURUSD",
+        type: "LIMIT",
+        price: 1.095,
+        status: "PENDING",
+      },
+    ])
+  );
+};
+
+// CANCEL ORDER
+export const cancelOrder = (req, res) => {
+  const { orderId } = req.params;
+
+  return res.json(
+    success({
+      cancelledOrderId: orderId,
+    })
+  );
+};
+
+// 🔥 FORCE PRICE MOVE
+export const movePrice = (req, res) => {
+  const { symbol, bid, ask } = req.body;
+
+  if (!prices[symbol]) {
+    return res.status(400).json(error("Invalid symbol"));
+  }
+
+  prices[symbol].bid = bid;
+  prices[symbol].ask = ask;
+  prices[symbol].spread = ask - bid;
+
+  return res.json(success(prices[symbol]));
+};
+
+// RESET ACCOUNT
+export const resetAccount = (req, res) => {
+  const { accountId } = req.params;
+
+  const ctx = getContext(accountId);
+  if (!ctx) return res.status(404).json(error("Account not found"));
+
+  ctx.positions.length = 0;
+  ctx.history.length = 0;
+
+  ctx.account.balance = 10000;
+  ctx.account.marginUsed = 0;
+
+  return res.json(success("Account reset"));
+};
